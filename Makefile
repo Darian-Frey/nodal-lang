@@ -1,43 +1,63 @@
-# Nodal V1.0 - Multi-Backend Makefile
-# Usage: 
-#   make TARGET=generic    (Default: Generic C kernels)
-#   make TARGET=arm        (Optimized for ARM Neon)
-#   make TARGET=riscv      (Future: RISC-V Vector)
+# ==========================================
+# Nodal V1.0 - Multi-Backend Build System
+# ==========================================
 
 CC = gcc
 CFLAGS = -O3 -Wall -Wextra -I./src
 LDFLAGS = -lm
 
-# Target Configuration
+# Target Configuration (generic, arm, riscv)
 TARGET ?= generic
 
-# Source Files
-SRCS = src/main.c \
-       src/executor.c \
-       src/loader.c \
-       src/kernels/cpu_generic.c
+# --- Source Files ---
+# Core Runtime Components
+CORE_SRCS = src/executor.c src/loader.c src/kernels/cpu_generic.c src/kernels/tokenizer.c
 
-# Backend Specific Settings
+# CLI Entry Point
+CLI_SRC = src/cli.c
+
+# Test Suite Entry Point
+TEST_SRC = src/test_suite.c
+
+# --- Backend Logic ---
 ifeq ($(TARGET), arm)
-    SRCS += src/kernels/arm_neon_nf4.c
+    CORE_SRCS += src/kernels/arm_neon_nf4.c
     CFLAGS += -mfpu=neon -march=armv8-a -DNODAL_TARGET_ARM
-    BINARY = nodal_arm
+    BINARY = nr_arm
 else ifeq ($(TARGET), riscv)
-    # Placeholder for RISC-V extensions
     CFLAGS += -march=rv64gcv -DNODAL_TARGET_RISCV
-    BINARY = nodal_riscv
+    BINARY = nr_riscv
 else
     CFLAGS += -DNODAL_TARGET_GENERIC
-    BINARY = nodal_generic
+    BINARY = nr
 endif
 
-# Build Rules
+# --- Build Rules ---
+
+.PHONY: all clean test help
+
 all: $(BINARY)
 
-$(BINARY): $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(BINARY) $(LDFLAGS)
+# Main Runtime Binary (nr)
+$(BINARY): $(CLI_SRC) $(CORE_SRCS)
+	$(CC) $(CFLAGS) $(CLI_SRC) $(CORE_SRCS) -o $(BINARY) $(LDFLAGS)
+	@echo "[SUCCESS] Built Nodal Runtime: $(BINARY)"
 
+# Test Suite Binary
+test: $(TEST_SRC) $(CORE_SRCS)
+	$(CC) $(CFLAGS) $(TEST_SRC) $(CORE_SRCS) -o nodal_test $(LDFLAGS)
+	@echo "[TEST] Running Nodal Validation Suite..."
+	./nodal_test
+
+# Cleanup
 clean:
-	rm -f nodal_generic nodal_arm nodal_riscv
+	rm -f nr nr_arm nr_riscv nodal_test test_model.nbbin
+	@echo "[CLEAN] Removed binaries and temporary models."
 
-.PHONY: all clean
+# Documentation / Help
+help:
+	@echo "Nodal Build System Commands:"
+	@echo "  make              - Build for generic CPU (Default)"
+	@echo "  make TARGET=arm   - Build with ARM Neon optimizations"
+	@echo "  make test         - Build and run the math validation suite"
+	@echo "  make clean        - Remove all generated binaries"
